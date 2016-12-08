@@ -1,0 +1,10 @@
+/bk/
+/lib/gen-py
+test/
+/output/
+
+*.swp
+*.pyc
+*.log
+*.idea
+*.pdf
