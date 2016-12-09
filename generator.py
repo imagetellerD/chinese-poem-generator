@@ -56,6 +56,7 @@ class Generator(object):
 
 		# load from data file
 		self._title_pingze_dict = {}
+		self._title_delimiter_dict = {}
 		self._pingze_words_dict = {}
 		self._pingze_rhythm_dict = {}
 		self._rhythm_word_dict = {}
@@ -76,7 +77,7 @@ class Generator(object):
 		
 		# storage of related precalculated data
 		self._data_files = [
-			"title_pingze_dict", "pingze_words_dict", "pingze_rhythm_dict", "rhythm_word_dict", "reverse_rhythm_word_dict", "reverse_pingze_word_dict", "word_count_dict", "rhythm_count_dict", "split_sentences", "bigram_word_to_start_dict", "bigram_word_to_end_dict", "bigram_count_dict"
+			"title_pingze_dict", "title_delimiter_dict", "pingze_words_dict", "pingze_rhythm_dict", "rhythm_word_dict", "reverse_rhythm_word_dict", "reverse_pingze_word_dict", "word_count_dict", "rhythm_count_dict", "split_sentences", "bigram_word_to_start_dict", "bigram_word_to_end_dict", "bigram_count_dict"
 		]
 
 		# store generated poem
@@ -147,7 +148,6 @@ class Generator(object):
 		for title, content_rhythm in TitleRhythmDict.iteritems():
 			#print title
 			#print content_rhythm
-			#print re.split(", |. |\*|`", content_rhythm)
 			sentences = re.findall(r"[0-9]+", content_rhythm)
 			new_sentences = []
 			for sentence in sentences:
@@ -161,6 +161,11 @@ class Generator(object):
 						new_sentence += "1"
 				new_sentences.append(new_sentence)
 			self._title_pingze_dict[title.decode()] = new_sentences
+			delimiters = []
+			for word in content_rhythm:
+				if word in [",", ".", "`", "|"]:
+					delimiters.append(word)
+			self._title_delimiter_dict[title.decode()] = delimiters
 
 	def _build_pingze_rhythm_words_dict(self, logger):
 		with open(self._ci_rhythm_file, 'r') as fp_r:
@@ -494,6 +499,7 @@ class Generator(object):
 
 		# trick here if no useful word given
 		if not useful_important_words:
+			logger.warning("no valid tags %s in user input, trick" % my_unicode(useful_important_words))
 			useful_important_words = [u"菊花"]
 
 		whole_similar_words = []
@@ -743,6 +749,22 @@ class Generator(object):
 		level = level + 1
 		self._sub_generate(format_sentence, word_sentence, global_repeat_words, current_repeat_dict, logger, level)
 
+	def _fill_result_with_format(self, result_sentence_list):
+		""" fill result with format"""
+
+		result = ""
+
+		delimiters = self._title_delimiter_dict[self._title]
+		idx_delimiter = 0
+		for result_sentence in result_sentence_list:
+			result += result_sentence
+			result += delimiters[idx_delimiter]
+			if (idx_delimiter+1 < len(delimiters)) and (delimiters[idx_delimiter+1] == "|"):
+				result += " | "
+				idx_delimiter += 1
+			idx_delimiter += 1
+		return result
+
 	def _generate(self, format_sentences, word_sentences, logger):
 		""" generate poem based on important words and rhythm word"""
 
@@ -771,8 +793,20 @@ class Generator(object):
 				global_repeat_words.append(word)
 			result_sentence_list.append(result_sub_sentence)
 
-		return u'，'.join(result_sentence_list)
+		print 'result_sentence_list len', len(result_sentence_list)
+		print 'delimiters len', len(self._title_delimiter_dict[self._title])
 
+		# fill with delimiter
+		if self._title not in self._title_delimiter_dict:
+			print 'here'
+			return u'，'.join(result_sentence_list)
+		elif len(self._title_delimiter_dict[self._title]) != (len(result_sentence_list)+1):
+			print 'here2'
+			raise
+			return u'，'.join(result_sentence_list)
+		else:
+			return self._fill_result_with_format(result_sentence_list)
+			
 	def init(self, logger):
 
 		if self._force_data_build:
@@ -785,6 +819,9 @@ class Generator(object):
 				self._init_data_build(logger)
 	
 	def check(self, input_param_dict, logger):
+		""" select ci-title with supported titles"""
+		return ""
+
 		if ('title' in input_param_dict) and (input_param_dict['title'] not in self._support_titles):
 			return "%s 不是候选的词牌名" % input_param_dict['title']
 
@@ -822,12 +859,18 @@ if __name__ == '__main__':
  
 	generator = Generator(basepath, conf)
 	try:
+		# special case test
+		user_input_dict = dict(title=u"南乡子", important_words=[], force_data_build=False)
+		user_input_dict = dict(title=u"南乡子", important_words=[u"计算机"], force_data_build=False)
+
+		user_input_dict = dict(title=u"水调歌头", important_words=[u"菊花", u"院子"], force_data_build=False)
+
 		# As user input, for theme of poem, and title
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊花", u"庭院"], force_data_build=False)
-		#user_input_dict = dict(title=u"水调歌头", important_words=[u"菊花", u"院子"], force_data_build=False)
+		#user_input_dict = dict(title=u"蝶恋花", important_words=[u"菊花", u"院子"], force_data_build=False)
 		#user_input_dict = dict(title=u"南乡子", important_words=[u"菊花", u"院子"], force_data_build=False)
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"山川", u"流水"], force_data_build=False)
-		user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊花", u"院子"], force_data_build=False)
+		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊花", u"院子"], force_data_build=False)
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊", u"院子"], force_data_build=False)
 		print user_input_dict["title"]
 
