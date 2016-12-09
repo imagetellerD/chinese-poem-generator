@@ -108,6 +108,28 @@ class Generator(object):
 	def force_data_build(self, value):
 		self._force_data_build = value
 
+	def _get_top_words_with_count(self, word_count_dict, topN=1):
+		words = []
+		if not word_count_dict:
+			return u""
+		word_count_dict = sorted(word_count_dict.items(), key=operator.itemgetter(1), reverse=True)
+		for i, (word, count) in enumerate(word_count_dict):
+			if i >= topN:
+				break
+			words.append((word, count))
+		return words
+
+	def _get_top_word_uniform_random(self, word_count_dict, topN=1):
+		words_with_count = self._get_top_words_with_count(word_count_dict, topN)
+		words = []
+		[ words.append(word) for (word, count) in words_with_count ]
+		idx = random.randint(0, len(words)-1)
+		return words[idx]
+
+	def _get_top_word_weight_random(self, word_count_dict, topN=1):
+		words_with_count = self._get_top_words_with_count(word_count_dict, topN)
+		return self._weighted_choice(words_with_count)
+
 	def _show_word_sentence(self, format_sentence, word_sentence, logger, comment="omg"):
 		logger.info("%s: format_sentence %s" % (comment, my_unicode(format_sentence)))
 		tmp_sentence = []
@@ -584,7 +606,7 @@ class Generator(object):
 
 			word_sentence[len(format_sentence)-1] = rhythm_word
 				
-	def _fill_word(self, direction, tofill_position, format_sentence, word_sentence, global_repeat_words, level, logger):
+	def _fill_word(self, direction, tofill_position, format_sentence, word_sentence, global_repeat_words, current_repeat_dict, level, logger):
 		""" fill word by related word, and position"""
 
 		logger.debug("fill_word: level[%d] fill word" % level)
@@ -615,8 +637,14 @@ class Generator(object):
 
 				# not use repeated word
 				if candidate_verb in global_repeat_words:
-					#logger.debug("fill_word: level[%d] candidate_verb %s in gloabel repeate words %s, skip" % (level, candidate_verb, my_unicode(global_repeat_words)))
+					#logger.debug("fill_word: level[%d] candidate_verb %s in global repeat words %s, skip" % (level, candidate_verb, my_unicode(global_repeat_words)))
 					continue
+
+				# not use too many repeated word in one sentence
+				if candidate_verb in current_repeat_dict:
+					if current_repeat_dict[candidate_verb] > 2:
+						logger.debug("fill_word: level[%d] candidate_verb %s in current repeat words, skip" % (level, candidate_verb))
+						continue
 
 				# check pingze order first
 				format_tofill_position = format_sentence[tofill_position]
@@ -632,17 +660,23 @@ class Generator(object):
 					candidate_verb_count_dict[candidate_verb] = self._bigram_count_dict[candidate_word]
 
 			if candidate_verb_count_dict: # there exists some valid verbs
-				selected_word = ""
-				max_count = -1
-				for candidate_verb, count in candidate_verb_count_dict.iteritems():
-					if count > max_count:
-						max_count = count
-						selected_word = candidate_verb
-				logger.debug("fill_word: level[%d] select_word %s with count %d" % (level, selected_word, max_count))
+				#selected_word = ""
+				# definitive select max one
+				#max_count = -1
+				#for candidate_verb, count in candidate_verb_count_dict.iteritems():
+				#	if count > max_count:
+				#		max_count = count
+				#		selected_word = candidate_verb
+				#logger.debug("fill_word: level[%d] select_word %s with count %d" % (level, selected_word, max_count))
+
+				# random select word
+				topN = 5
+				selected_word = self._get_top_word_weight_random(candidate_verb_count_dict, topN)
+				logger.debug("fill_word: level[%d] select_word %s with random topN %d" % (level, selected_word, topN))
 			else:
 				logger.error("fill_word: level[%d] no candidate word" % (level))
 				if candidate_words: # no pingze satisfy, random select one
-					idx = random.randint(0, len(candidate_words))
+					idx = random.randint(0, len(candidate_words) - 1)
 					selected_word = candidate_words[idx][verb_position]
 					logger.debug("fill_word: level[%d] select_word %s with idx %d" % (level, selected_word, idx))
 				else:
@@ -652,9 +686,14 @@ class Generator(object):
 
 		# select and fill
 		word_sentence[tofill_position] = selected_word
+		if selected_word not in current_repeat_dict:
+			current_repeat_dict[selected_word] = 1
+		else:
+			current_repeat_dict[selected_word] += 1
+		
 		logger.info("fill_word: level[%d] tofill_position[%d] seed_word %s, fill_word %s" % (level, tofill_position, seed_word, selected_word))
 
-	def _sub_generate(self, format_sentence, word_sentence, global_repeat_words, logger, level=0):
+	def _sub_generate(self, format_sentence, word_sentence, global_repeat_words, current_repeat_dict, logger, level=0):
 		""" recursion generate single sentence"""
 
 		sentence_length = len(format_sentence)
@@ -696,13 +735,13 @@ class Generator(object):
 		# fill word one by one
 		if up_fill_direction:
 			logger.debug("sub_generate: level[%d] use up_fill method" % (level))
-			self._fill_word(1, tofill_position, format_sentence, word_sentence, global_repeat_words, level, logger)
+			self._fill_word(1, tofill_position, format_sentence, word_sentence, global_repeat_words, current_repeat_dict, level, logger)
 		else:
 			logger.debug("sub_generate: level[%d] use down_fill method" % (level))
-			self._fill_word(-1, tofill_position, format_sentence, word_sentence, global_repeat_words, level, logger)
+			self._fill_word(-1, tofill_position, format_sentence, word_sentence, global_repeat_words, current_repeat_dict, level, logger)
 	
 		level = level + 1
-		self._sub_generate(format_sentence, word_sentence, global_repeat_words, logger, level)
+		self._sub_generate(format_sentence, word_sentence, global_repeat_words, current_repeat_dict, logger, level)
 
 	def _generate(self, format_sentences, word_sentences, logger):
 		""" generate poem based on important words and rhythm word"""
@@ -710,11 +749,21 @@ class Generator(object):
 		result_sentence_list = []
 
 		# generate each sentence
+		# avoid words between sentences
 		global_repeat_words = []
 		for i, (format_sentence, word_sentence) in enumerate(zip(format_sentences, word_sentences)):
 			result_sub_sentence = ""
+
+			# avoid too many same word in one sentence
+			current_repeat_dict = {}
+			for word in word_sentence.values():
+				if word not in current_repeat_dict:
+					current_repeat_dict[word] = 1
+				else:
+					current_repeat_dict[word] += 1
+
 			self._show_word_sentence(format_sentence, word_sentence, logger, "omg origin:s %d" % (i+1))
-			self._sub_generate(format_sentence, word_sentence, global_repeat_words, logger)
+			self._sub_generate(format_sentence, word_sentence, global_repeat_words, current_repeat_dict, logger)
 			self._show_word_sentence(format_sentence, word_sentence, logger, "omg final:s %d" % (i+1))
 
 			for word in word_sentence.values():
@@ -777,6 +826,7 @@ if __name__ == '__main__':
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊花", u"庭院"], force_data_build=False)
 		#user_input_dict = dict(title=u"水调歌头", important_words=[u"菊花", u"院子"], force_data_build=False)
 		#user_input_dict = dict(title=u"南乡子", important_words=[u"菊花", u"院子"], force_data_build=False)
+		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"山川", u"流水"], force_data_build=False)
 		user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊花", u"院子"], force_data_build=False)
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊", u"院子"], force_data_build=False)
 		print user_input_dict["title"]
