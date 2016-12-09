@@ -502,10 +502,15 @@ class Generator(object):
 			logger.warning("no valid tags %s in user input, trick" % my_unicode(useful_important_words))
 			useful_important_words = [u"菊花"]
 
+		# cut useful words, it seems too many useful words not ok than simple one
+		max_useful_words_len = 3
+		if len(useful_important_words) > max_useful_words_len:
+			useful_important_words = useful_important_words[:max_useful_words_len]
+
 		whole_similar_words = []
 		try:
 			whole_similar_words = self._word_model.most_similar(positive=useful_important_words, topn=candidate_length)
-			logger.info("get whole_similar_words %s based on important_words %s as whole" % (my_unicode(whole_similar_words), my_unicode(important_words)))
+			logger.info("get whole_similar_words %s based on useful_important_words %s as whole" % (my_unicode(whole_similar_words), my_unicode(useful_important_words)))
 		except KeyError as e:
 			logger.exception(e)
 
@@ -552,9 +557,7 @@ class Generator(object):
 			if count > 5:
 				break
 
-		print 'narrow' , narrow_candidate_rhythms
 		selected_rhythm = self._weighted_choice(narrow_candidate_rhythms)
-		print 'select', selected_rhythm
 		return selected_rhythm
 
 	def _generate_common_words(self, rhythm, is_ping=True):
@@ -699,6 +702,18 @@ class Generator(object):
 		
 		logger.info("fill_word: level[%d] tofill_position[%d] seed_word %s, fill_word %s" % (level, tofill_position, seed_word, selected_word))
 
+	def _up_fill_direction(self, tofill_position, sentence_length, logger):
+		""" some words are connected tight than other"""
+		format_positions = self._check_position_by_sentence_length(sentence_length, logger)
+
+		# we dont know, use down-fill
+		if not format_positions:
+			return False
+		if tofill_position in format_positions:
+			return False
+		else:
+			return True
+
 	def _sub_generate(self, format_sentence, word_sentence, global_repeat_words, current_repeat_dict, logger, level=0):
 		""" recursion generate single sentence"""
 
@@ -726,6 +741,12 @@ class Generator(object):
 		if len(candidate_positions) == 1: # no choice but use this
 			tofill_position = candidate_positions[0]
 		else: # random choose one in choices
+
+			## always fill rhythm_word related at end
+			#if sentence_length - word_sentence_length > 1: 
+			#	if (sentence_length - 2) in candidate_positions:
+			#		candidate_positions.remove(sentence_length - 2)
+
 			idx = random.randint(0, len(candidate_positions) - 1)
 			tofill_position = candidate_positions[idx]
 		logger.debug("sub_generate: level[%d] tofill_position %d" % (level, tofill_position))
@@ -735,7 +756,13 @@ class Generator(object):
 		both_fill_direction = up_fill_direction and down_fill_direction
 
 		if both_fill_direction: # consider format, choose only one, consider later
-			up_fill_direction = False
+			if self._up_fill_direction(tofill_position, sentence_length, logger):
+				up_fill_direction = True
+				down_fill_direction = False
+			else:
+				up_fill_direction = False
+				down_fill_direction = True
+			
 		logger.debug("sub_generate: level[%d] up_fill_direction[%d] down_fill_direction[%d]" % (level, up_fill_direction, down_fill_direction))
 
 		# fill word one by one
@@ -792,9 +819,6 @@ class Generator(object):
 				result_sub_sentence += word
 				global_repeat_words.append(word)
 			result_sentence_list.append(result_sub_sentence)
-
-		print 'result_sentence_list len', len(result_sentence_list)
-		print 'delimiters len', len(self._title_delimiter_dict[self._title])
 
 		# fill with delimiter
 		if self._title not in self._title_delimiter_dict:
@@ -863,8 +887,7 @@ if __name__ == '__main__':
 		user_input_dict = dict(title=u"南乡子", important_words=[], force_data_build=False)
 		user_input_dict = dict(title=u"南乡子", important_words=[u"计算机"], force_data_build=False)
 
-		user_input_dict = dict(title=u"水调歌头", important_words=[u"菊花", u"院子"], force_data_build=False)
-
+		#user_input_dict = dict(title=u"水调歌头", important_words=[u"菊花", u"院子"], force_data_build=False)
 		# As user input, for theme of poem, and title
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊花", u"庭院"], force_data_build=False)
 		#user_input_dict = dict(title=u"蝶恋花", important_words=[u"菊花", u"院子"], force_data_build=False)
@@ -872,24 +895,38 @@ if __name__ == '__main__':
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"山川", u"流水"], force_data_build=False)
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊花", u"院子"], force_data_build=False)
 		#user_input_dict = dict(title=u"浣溪沙", important_words=[u"菊", u"院子"], force_data_build=False)
-		print user_input_dict["title"]
 
-		# Init
-		generator.force_data_build = user_input_dict["force_data_build"]
-		generator.init(logger)
+		# if True:
+		for title in TitleRhythmDict.keys():
+			#title = u"浣溪沙"
+			#title = u"水调歌头"
+			title = title.decode()
+			print title
+			mock_tags = {"天空":{"text":"天空","confidence":99},"草":{"text":"草","confidence":99},"户外":{"text":"户外","confidence":99},"山":{"text":"山","confidence":99},"田地":{"text":"田地","confidence":98},"绿色":{"text":"绿色","confidence":93},"自然":{"text":"自然","confidence":93},"动物":{"text":"动物","confidence":81},"绿色的":{"text":"绿色的","confidence":70},"放牧":{"text":"放牧","confidence":70},"打开":{"text":"打开","confidence":65},"牧场":{"text":"牧场","confidence":64},"青葱的":{"text":"青葱的","confidence":56},"高地":{"text":"高地","confidence":48},"黄牛":{"text":"黄牛","confidence":42},"平原":{"text":"平原","confidence":27},"距离":{"text":"距离","confidence":13}}
+			important_words = []
+			for mock_tag in mock_tags.keys():
+				important_words.append(mock_tag.decode())
+			user_input_dict = dict(title=title, important_words=important_words, force_data_build=False)
 
-		# Generate poem
-		error_info = generator.check(user_input_dict, logger)
-		if not error_info:
-			generator.important_words = user_input_dict["important_words"]
-			generator.title = user_input_dict["title"]
+			print user_input_dict["title"]
 
-			logger.info("generate poem for title %s, with important words %s" % (generator.title, my_unicode(generator.important_words)))
-			print generator.generate(logger)
-		else:
-			logger.error("dont generate poem because of %s" % error_info)
-			print error_info
-		   
+			# Init
+			generator.force_data_build = user_input_dict["force_data_build"]
+			generator.init(logger)
+
+			# Generate poem
+			print 'title', title
+			error_info = generator.check(user_input_dict, logger)
+			if not error_info:
+				generator.important_words = user_input_dict["important_words"]
+				generator.title = user_input_dict["title"]
+
+				logger.info("generate poem for title %s, with important words %s" % (generator.title, my_unicode(generator.important_words)))
+				print generator.generate(logger)
+			else:
+				logger.error("dont generate poem because of %s" % error_info)
+				print error_info
+
 	except ValueError as e:
 		logger.exception(e)
 		print e
