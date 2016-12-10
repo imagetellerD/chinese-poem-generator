@@ -822,11 +822,8 @@ class Generator(object):
 
 		# fill with delimiter
 		if self._title not in self._title_delimiter_dict:
-			print 'here'
 			return u'，'.join(result_sentence_list)
 		elif len(self._title_delimiter_dict[self._title]) != (len(result_sentence_list)+1):
-			print 'here2'
-			raise
 			return u'，'.join(result_sentence_list)
 		else:
 			return self._fill_result_with_format(result_sentence_list)
@@ -901,7 +898,6 @@ if __name__ == '__main__':
 			#title = u"浣溪沙"
 			#title = u"水调歌头"
 			title = title.decode()
-			print title
 			mock_tags = {"天空":{"text":"天空","confidence":99},"草":{"text":"草","confidence":99},"户外":{"text":"户外","confidence":99},"山":{"text":"山","confidence":99},"田地":{"text":"田地","confidence":98},"绿色":{"text":"绿色","confidence":93},"自然":{"text":"自然","confidence":93},"动物":{"text":"动物","confidence":81},"绿色的":{"text":"绿色的","confidence":70},"放牧":{"text":"放牧","confidence":70},"打开":{"text":"打开","confidence":65},"牧场":{"text":"牧场","confidence":64},"青葱的":{"text":"青葱的","confidence":56},"高地":{"text":"高地","confidence":48},"黄牛":{"text":"黄牛","confidence":42},"平原":{"text":"平原","confidence":27},"距离":{"text":"距离","confidence":13}}
 			important_words = []
 			for mock_tag in mock_tags.keys():
@@ -929,8 +925,6 @@ if __name__ == '__main__':
 
 	except ValueError as e:
 		logger.exception(e)
-		print e
 	except Exception as e:
 		logger.exception(e)
-		print e
 
